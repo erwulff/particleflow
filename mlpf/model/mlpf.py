@@ -367,7 +367,6 @@ class MLPF(nn.Module):
         self.nn_eta = RegressionOutput(eta_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
-        # self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
 
         if self.use_pre_layernorm:  # add final norm after last attention block as per https://arxiv.org/abs/2002.04745
             self.final_norm_id = torch.nn.LayerNorm(decoding_dim)
@@ -428,37 +427,22 @@ class MLPF(nn.Module):
         preds_eta = self.nn_eta(X_features, final_embedding_reg, X_features[..., 2:3])
         preds_sin_phi = self.nn_sin_phi(X_features, final_embedding_reg, X_features[..., 3:4])
         preds_cos_phi = self.nn_cos_phi(X_features, final_embedding_reg, X_features[..., 4:5])
-        # preds_energy = self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6])
 
         # Assume mass of a charged pion and compute energy from pt and eta
-        # TODO: Don't transform for now, the transformation has been implemented in a later commit. Change before merging to main.
-        pt_real = torch.exp(preds_pt.detach()) * X_features[..., 1:2]
-        pt_real = preds_pt.detach()
+        pt_real = torch.exp(preds_pt.detach()) * X_features[..., 1:2]  # transform pt back into physical space
         pz_real = pt_real * torch.sinh(preds_eta.detach())
 
         # E^2 = pt^2 + pz^2 + m^2 in natural units
         e_real = torch.sqrt(pt_real**2 + pz_real**2 + self.m_pion**2)
-        # TODO: Don't transform for now, the transformation has been implemented in a later commit. Change before merging.
-        # e_transformed = torch.log(e_real / X_features[..., 5:6])
-        e_transformed = e_real
+        preds_energy = torch.log(e_real / X_features[..., 5:6])  # transform E back into normalized space, this is undone at inference time
 
         # Handle NaNs and infs
-        e_transformed[~mask] = 0
-        e_transformed[torch.isinf(e_transformed)] = 0
-        e_transformed[torch.isnan(e_transformed)] = 0
-        preds_energy = e_transformed
+        preds_energy[~mask] = 0
+        preds_energy[torch.isinf(preds_energy)] = 0
+        preds_energy[torch.isnan(preds_energy)] = 0
 
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
 
-        # ensure created particle has positive mass^2 by computing energy from pt and adding a positive-only correction
-        pt_real = torch.exp(preds_pt.detach()) * X_features[..., 1:2]
-        pz_real = pt_real * torch.sinh(preds_eta.detach())
-        e_real = torch.log(torch.sqrt(pt_real**2 + pz_real**2) / X_features[..., 5:6])
-        e_real[~mask] = 0
-        e_real[torch.isinf(e_real)] = 0
-        e_real[torch.isnan(e_real)] = 0
-        preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))
-        preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
         return preds_binary_particle, preds_pid, preds_momentum
 
 
