@@ -1,11 +1,11 @@
 import sys
 
 # Support for GPU executor: set onnxruntime path before imports
-if "--device" in sys.argv:
-    idx = sys.argv.index("--device")
-    if sys.argv[idx + 1] == "cuda":
-        print("device=cuda, using onnxruntime-gpu from /opt/onnxruntime-gpu/lib/python3.12/site-packages/")
-        sys.path.insert(0, "/opt/onnxruntime-gpu/lib/python3.12/site-packages/")
+# if "--device" in sys.argv:
+#     idx = sys.argv.index("--device")
+#     if sys.argv[idx + 1] == "cuda":
+#         print("device=cuda, using onnxruntime-gpu from /opt/onnxruntime-gpu/lib/python3.12/site-packages/")
+#         sys.path.insert(0, "/opt/onnxruntime-gpu/lib/python3.12/site-packages/")
 
 import os
 import time
@@ -102,7 +102,12 @@ def parse_args():
         default=SUPPORTED_CONFIGS,
         help="List of configurations to run",
     )
-    parser.add_argument("--num-threads", type=int, default=1, help="Number of CPU threads to use")
+    # num-threads for PyTorch and ONNX Runtime
+    # default value of 0 lets the libraries choose the number
+    parser.add_argument("--num-threads-torch-intra", type=int, default=0, help="Number of CPU threads for intra-op parallelism in PyTorch")
+    parser.add_argument("--num-threads-torch-inter", type=int, default=0, help="Number of CPU threads for inter-op parallelism in PyTorch")
+    parser.add_argument("--num-threads-onnx-intra", type=int, default=0, help="Number of CPU threads for intra-op parallelism in ONNX Runtime")
+    parser.add_argument("--num-threads-onnx-inter", type=int, default=0, help="Number of CPU threads for inter-op parallelism in ONNX Runtime")
     return parser.parse_args()
 
 
@@ -195,7 +200,13 @@ def get_gpu_info():
 
 def main():
     args = parse_args()
-    torch.set_num_threads(args.num_threads)
+
+    # only set torch threads if > 0, otherwise leave it to PyTorch to decide
+    if args.num_threads_torch_intra > 0:
+        torch.set_num_threads(args.num_threads_torch_intra)
+    if args.num_threads_torch_inter > 0:
+        torch.set_num_interop_threads(args.num_threads_torch_inter)
+
     os.makedirs(args.outdir, exist_ok=True)
     mplhep.style.use("CMS")
 
@@ -360,8 +371,8 @@ def main():
 
     # Initialize ONNX sessions
     sess_options = rt.SessionOptions()
-    sess_options.intra_op_num_threads = args.num_threads
-    sess_options.inter_op_num_threads = args.num_threads
+    sess_options.intra_op_num_threads = args.num_threads_onnx_intra
+    sess_options.inter_op_num_threads = args.num_threads_onnx_inter
     execution_provider = "CPUExecutionProvider" if args.device == "cpu" else "CUDAExecutionProvider"
 
     if "ONNX_MATH_FP32" in configs:
@@ -707,7 +718,10 @@ def main():
         "valid_loss": valid_loss,
         "system": {
             "device": args.device,
-            "num_threads": args.num_threads,
+            "num_threads_torch_intra": args.num_threads_torch_intra,
+            "num_threads_torch_inter": args.num_threads_torch_inter,
+            "num_threads_onnx_intra": args.num_threads_onnx_intra,
+            "num_threads_onnx_inter": args.num_threads_onnx_inter,
             "cpu": get_cpu_info(),
             "gpu": get_gpu_info(),
             "pytorch_version": torch.__version__,
