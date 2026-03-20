@@ -1,12 +1,5 @@
 import sys
 
-# Support for GPU executor: set onnxruntime path before imports
-# if "--device" in sys.argv:
-#     idx = sys.argv.index("--device")
-#     if sys.argv[idx + 1] == "cuda":
-#         print("device=cuda, using onnxruntime-gpu from /opt/onnxruntime-gpu/lib/python3.12/site-packages/")
-#         sys.path.insert(0, "/opt/onnxruntime-gpu/lib/python3.12/site-packages/")
-
 import os
 import time
 import gc

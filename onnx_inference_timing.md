@@ -73,13 +73,3 @@ python scripts/plot-onnx-summary.py \
 ```
 
 This produces aggregate PDF and PNG plots plus `summary.txt` in `--outdir`.
-
-## CUDA note
-
-`--device cuda` uses a hardcoded `onnxruntime-gpu` path in `scripts/cms-validate-onnx.py`:
-
-`/opt/onnxruntime-gpu/lib/python3.12/site-packages/`
-
-If the hardcoded path in the script does not exist on the machine, CPU benchmarking should still work, but CUDA benchmarking will likely fail unless the environment matches that layout.
-
-Another way to run on GPU is to use a Python environment that has `onnxruntime-gpu` installed and does not also install plain `onnxruntime`. In that setup, after removing or commenting out the manual `sys.path` injection in `scripts/cms-validate-onnx.py`, the script should import the GPU runtime directly from the active environment.
